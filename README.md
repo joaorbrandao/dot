@@ -1,3 +1,5 @@
+![banner](resources/banner_v1.png)
+
 # dot
 
 A TypeScript CLI tool to install and backup your dotfiles from a Git repository.
