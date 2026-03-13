@@ -12,8 +12,8 @@
     "dev": "ts-node src/index.ts",
     "deploy:local": "npm install -g .",
     "start": "node dist/index.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "jest --config jest.config.cjs --forceExit",
+    "test:watch": "jest --config jest.config.cjs --watch",
     "lint": "eslint src/**/*.ts",
     "clean": "rm -rf dist"
   },

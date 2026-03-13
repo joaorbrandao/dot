@@ -28,9 +28,11 @@ program
 // ── install ──────────────────────────────────────────────────────────────────
 
 program
-  .command("install <repo-url>")
+  .command("install [repo-url]")
   .description(
     "Clone (or update) a dotfiles repository and install its contents onto the system.\n" +
+      "Pass a remote URL as the first argument, or use --local to point to an existing\n" +
+      "local repository and skip the clone/pull step entirely.\n" +
       "Packages declared in dot.yaml are installed via the appropriate package manager,\n" +
       "and each dotfile is symlinked (or copied) to its target location."
   )
@@ -38,6 +40,10 @@ program
     "-d, --dir <path>",
     "Local directory to clone the repository into",
     DEFAULT_DOTFILES_DIR
+  )
+  .option(
+    "-l, --local <path>",
+    "Use an existing local repository at this path (skips clone/pull)"
   )
   .option(
     "-c, --copy",
@@ -49,7 +55,13 @@ program
     "Skip package manager installation steps",
     false
   )
-  .action(async (repoUrl: string, opts: InstallOptions) => {
+  .action(async (repoUrl: string | undefined, opts: InstallOptions) => {
+    if (!repoUrl && !opts.local) {
+      console.error(
+        "error: must provide either a <repo-url> argument or the --local <path> option"
+      );
+      process.exit(1);
+    }
     await installCommand(repoUrl, opts);
   });
 

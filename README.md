@@ -10,6 +10,7 @@ A TypeScript CLI tool to install and backup your dotfiles from a Git repository.
 |---|---|
 | `dot setup` | Create an example `dot.yaml` in your dotfiles directory |
 | `dot install <repo-url>` | Clone a dotfiles repo and install its contents onto the system |
+| `dot install --local <path>` | Install from an existing local repository (no clone/pull) |
 | `dot backup` | Copy system dotfiles back into the local repo and commit |
 
 ---
@@ -97,21 +98,30 @@ dot setup --force   # overwrite existing config
 
 ---
 
-### `dot install <repo-url> [options]`
+### `dot install [repo-url] [options]`
 
 Clones (or pulls) a dotfiles repository, installs declared packages, then symlinks (or copies) each dotfile to its target on the system.
+
+Provide either a `<repo-url>` argument **or** the `--local <path>` option — at least one is required.
 
 | Option | Default | Description |
 |---|---|---|
 | `-d, --dir <path>` | `~/.dotfiles` | Local directory to clone the repo into |
+| `-l, --local <path>` | — | Use an existing local repository at this path (skips clone/pull) |
 | `-c, --copy` | `false` | Copy files instead of creating symlinks |
 | `--skip-packages` | `false` | Skip package manager installation |
 
 ```bash
+# Remote repository
 dot install https://github.com/you/dotfiles.git
 dot install https://github.com/you/dotfiles.git --copy
 dot install https://github.com/you/dotfiles.git --skip-packages
 dot install https://github.com/you/dotfiles.git --dir ~/my-dots
+
+# Existing local repository (no network required)
+dot install --local ~/projects/dotfiles
+dot install --local ~/projects/dotfiles --copy
+dot install --local ~/projects/dotfiles --skip-packages
 ```
 
 **Conflict behaviour:** if a file or symlink already exists at a target path it is removed and replaced. Directories are recreated automatically.

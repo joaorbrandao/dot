@@ -34,6 +34,12 @@ export interface DotfilesConfig {
 export interface InstallOptions {
   /** Local directory where the repo will be cloned / already exists. */
   dir: string;
+  /**
+   * Path to an already-present local repository.
+   * When provided, the clone/pull step is skipped entirely and this path
+   * is used directly as the dotfiles directory.
+   */
+  local?: string;
   /** When true, files are copied instead of symlinked. */
   copy: boolean;
   /** When true, skip package installation. */

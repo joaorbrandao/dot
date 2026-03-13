@@ -11,32 +11,42 @@ import * as logger from "../utils/logger.js";
  * Executes the `install` command.
  *
  * Workflow:
- *  1. Clone the remote repository (or pull if already present locally).
+ *  1. Clone the remote repository (or pull if already present locally),
+ *     unless `--local <path>` is supplied — in that case the sync step is
+ *     skipped and the provided path is used directly.
  *  2. Read `dot.yaml` from the repo root.
  *  3. Install declared packages (unless `--skip-packages` is passed).
  *  4. Link or copy each dotfile entry to its system target.
  *  5. Print a consolidated result summary.
  *
  * @param repoUrl - Remote git URL of the dotfiles repository.
+ *                  May be `undefined` when `options.local` is provided.
  * @param options - Parsed CLI options for this command.
  */
 export async function installCommand(
-  repoUrl: string,
+  repoUrl: string | undefined,
   options: InstallOptions
 ): Promise<void> {
-  const localDir = path.resolve(expandHome(options.dir));
+  // Resolve the working directory: prefer --local over --dir.
+  const localDir = options.local
+    ? path.resolve(expandHome(options.local))
+    : path.resolve(expandHome(options.dir));
 
-  // ── 1. Clone / pull ──────────────────────────────────────────────────────
-  logger.section("Syncing repository");
-  const spin = logger.spinner(`Fetching ${repoUrl} → ${localDir}`);
+  // ── 1. Clone / pull (skipped for local repos) ────────────────────────────
+  if (options.local) {
+    logger.info(`Using local repository: ${localDir}`);
+  } else {
+    logger.section("Syncing repository");
+    const spin = logger.spinner(`Fetching ${repoUrl} → ${localDir}`);
 
-  try {
-    await cloneOrPull(repoUrl, localDir);
-    spin.succeed("Repository ready");
-  } catch (err) {
-    spin.fail("Failed to sync repository");
-    logger.error("Git operation failed", err);
-    process.exit(1);
+    try {
+      await cloneOrPull(repoUrl!, localDir);
+      spin.succeed("Repository ready");
+    } catch (err) {
+      spin.fail("Failed to sync repository");
+      logger.error("Git operation failed", err);
+      process.exit(1);
+    }
   }
 
   // ── 2. Read config ───────────────────────────────────────────────────────
