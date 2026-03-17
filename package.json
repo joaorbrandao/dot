@@ -1,11 +1,23 @@
 {
-  "name": "dot",
+  "name": "@joaobrandao/dot",
   "version": "1.0.0",
   "description": "A CLI tool to install and backup dotfiles from a Git repository (dot)",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
     "dot": "./dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joaorbrandao/dot.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
@@ -35,5 +47,14 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": [
+    "dotfiles",
+    "cli",
+    "backup",
+    "install",
+    "configuration"
+  ],
+  "license": "MIT",
+  "author": "joaorbrandao"
 }
