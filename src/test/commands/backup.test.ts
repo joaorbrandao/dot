@@ -5,18 +5,21 @@ import * as git from "../../utils/git.js";
 import * as config from "../../utils/config.js";
 import * as files from "../../utils/files.js";
 import * as logger from "../../utils/logger.js";
+import * as secrets from "../../utils/secrets.js";
 
 jest.mock("fs");
 jest.mock("../../utils/git.js");
 jest.mock("../../utils/config.js");
 jest.mock("../../utils/files.js");
 jest.mock("../../utils/logger.js");
+jest.mock("../../utils/secrets.js");
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockGit = git as jest.Mocked<typeof git>;
 const mockConfig = config as jest.Mocked<typeof config>;
 const mockFiles = files as jest.Mocked<typeof files>;
 const mockLogger = logger as jest.Mocked<typeof logger>;
+const mockSecrets = secrets as jest.Mocked<typeof secrets>;
 
 // ── shared defaults ───────────────────────────────────────────────────────────
 
@@ -30,7 +33,7 @@ const DEFAULT_OPTIONS = {
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function makeSpinner() {
-  return { succeed: jest.fn(), fail: jest.fn(), stop: jest.fn() };
+  return { succeed: jest.fn(), fail: jest.fn(), stop: jest.fn(), warn: jest.fn() };
 }
 
 // ── setup / teardown ──────────────────────────────────────────────────────────
@@ -56,6 +59,9 @@ beforeEach(() => {
   mockLogger.warn.mockImplementation(() => {});
   mockLogger.info.mockImplementation(() => {});
   mockLogger.success.mockImplementation(() => {});
+
+  // Default: gitleaks installed, no secrets found.
+  mockSecrets.scanForSecrets.mockResolvedValue({ clean: true, installed: true });
 });
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -181,6 +187,55 @@ describe("backupCommand()", () => {
       mockGit.gitPush.mockRejectedValue(new Error("push failed"));
 
       await expect(backupCommand(DEFAULT_OPTIONS)).rejects.toThrow("process.exit(1)");
+    });
+  });
+
+  describe("secrets scanning", () => {
+    beforeEach(() => {
+      mockFs.existsSync.mockReturnValue(true);
+      mockConfig.readConfig.mockReturnValue({
+        dotfiles: [{ source: ".zshrc", target: "~/.zshrc" }],
+      });
+      mockFiles.backupDotfiles.mockReturnValue([
+        { source: ".zshrc", target: "/home/user/.zshrc", success: true },
+      ]);
+      mockGit.stageAll.mockResolvedValue(true);
+      mockGit.getRepoStatus.mockResolvedValue({
+        staged: [".zshrc"],
+        modified: [],
+        untracked: [],
+      });
+      mockGit.gitCommit.mockResolvedValue(undefined);
+      mockGit.gitPush.mockResolvedValue(undefined);
+    });
+
+    it("proceeds normally when no secrets are found", async () => {
+      mockSecrets.scanForSecrets.mockResolvedValue({ clean: true, installed: true });
+      await backupCommand(DEFAULT_OPTIONS);
+      expect(mockGit.gitCommit).toHaveBeenCalled();
+    });
+
+    it("calls process.exit(1) and skips commit when secrets are detected", async () => {
+      mockSecrets.scanForSecrets.mockResolvedValue({
+        clean: false,
+        installed: true,
+        output: "Finding: AWS secret key detected",
+      });
+      await expect(backupCommand(DEFAULT_OPTIONS)).rejects.toThrow("process.exit(1)");
+      expect(mockGit.gitCommit).not.toHaveBeenCalled();
+    });
+
+    it("warns but continues when gitleaks is not installed", async () => {
+      mockSecrets.scanForSecrets.mockResolvedValue({ clean: true, installed: false });
+      await backupCommand(DEFAULT_OPTIONS);
+      expect(spinner.warn).toHaveBeenCalled();
+      expect(mockGit.gitCommit).toHaveBeenCalled();
+    });
+
+    it("skips the scan entirely when skipSecretsCheck is true", async () => {
+      await backupCommand({ ...DEFAULT_OPTIONS, skipSecretsCheck: true });
+      expect(mockSecrets.scanForSecrets).not.toHaveBeenCalled();
+      expect(mockGit.gitCommit).toHaveBeenCalled();
     });
   });
 

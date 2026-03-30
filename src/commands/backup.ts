@@ -5,6 +5,7 @@ import { BackupOptions, FileOperationResult } from "../types/index.js";
 import { stageAll, gitCommit, gitPush, getRepoStatus } from "../utils/git.js";
 import { readConfig } from "../utils/config.js";
 import { backupDotfiles } from "../utils/files.js";
+import { scanForSecrets } from "../utils/secrets.js";
 import * as logger from "../utils/logger.js";
 
 /**
@@ -53,6 +54,24 @@ export async function backupCommand(options: BackupOptions): Promise<void> {
   const failed = results.filter((r) => !r.success);
   if (failed.length > 0) {
     logger.warn("Some files could not be backed up — committing the rest.");
+  }
+
+  // ── 3. Scan for secrets ──────────────────────────────────────────────────
+  if (!options.skipSecretsCheck) {
+    logger.section("Scanning for secrets");
+    const scanSpin = logger.spinner("Running gitleaks…");
+    const { clean, installed, output } = await scanForSecrets(repoDir);
+
+    if (!installed) {
+      scanSpin.warn("gitleaks not found — install it to enable secret scanning");
+    } else if (!clean) {
+      scanSpin.fail("Secrets detected — aborting backup");
+      if (output) console.log("\n" + output);
+      logger.error("Remove the secrets above and retry the backup.");
+      process.exit(1);
+    } else {
+      scanSpin.succeed("No secrets detected");
+    }
   }
 
   // ── 4. Commit & optionally push ──────────────────────────────────────────
