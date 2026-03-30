@@ -2,6 +2,10 @@
 
 # dot
 
+> 🤖 🤝 👨‍💻
+>
+> **Implemented by AI. Designed and Supervised by Human.**
+
 A TypeScript CLI tool to install and backup your dotfiles from a Git repository.
 
 ## Commands
@@ -137,12 +141,16 @@ Copies each system dotfile back into the local repository at its declared `sourc
 | `-d, --dir <path>` | `~/.dotfiles` | Path to the local dotfiles repository |
 | `-m, --message <msg>` | `backup: YYYY-MM-DD` | Git commit message |
 | `--no-push` | `false` | Commit locally without pushing |
+| `--skip-secrets-check` | `false` | Skip the gitleaks secret scan before committing |
+
+Before committing, `dot backup` runs [gitleaks](https://github.com/gitleaks/gitleaks) against the repository to detect secrets in your dotfiles. If secrets are found, the backup is aborted and the findings are printed so you can remove them. If `gitleaks` is not installed, a warning is shown and the backup continues.
 
 ```bash
 dot backup
 dot backup --message "add nvim config"
 dot backup --no-push
 dot backup --dir ~/my-dots
+dot backup --skip-secrets-check   # bypass secret scanning
 ```
 
 ---
@@ -189,5 +197,6 @@ src/
     ├── files.ts           # Symlink/copy helpers, home expansion
     ├── git.ts             # Clone, pull, commit, push (simple-git)
     ├── packages.ts        # brew / npm / pip / apt installers (zx)
+    ├── secrets.ts         # gitleaks secret scanning wrapper (zx)
     └── logger.ts          # Terminal output (chalk + ora)
 ```

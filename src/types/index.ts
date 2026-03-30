@@ -72,6 +72,8 @@ export interface BackupOptions {
    * Set to `false` by Commander when the user passes `--no-push`.
    */
   push: boolean;
+  /** When true, skip the gitleaks secret scan before committing. */
+  skipSecretsCheck?: boolean;
 }
 
 /**
