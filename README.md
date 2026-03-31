@@ -1,4 +1,4 @@
-![banner](resources/banner_v1.png)
+![logo](resources/logo_v1.png)
 
 # dot
 
