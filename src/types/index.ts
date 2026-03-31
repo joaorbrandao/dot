@@ -9,7 +9,7 @@ export const DotfileEntrySchema = z.object({
 
 export const PackageMapSchema = z.record(
   z.string(),
-  z.array(z.string()).optional()
+  z.array(z.string()).nullable().optional()
 );
 
 export const DotfilesConfigSchema = z.object({
