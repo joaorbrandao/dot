@@ -1,8 +1,9 @@
 import path from "path";
 import os from "os";
+import fs from "fs";
 import { InstallOptions, FileOperationResult } from "../types/index.js";
 import { cloneOrPull } from "../utils/git.js";
-import { readConfig } from "../utils/config.js";
+import { readConfig, writeDefaultConfig, writeAppConfig, CONFIG_FILENAME } from "../utils/config.js";
 import { installDotfiles } from "../utils/files.js";
 import { installPackages } from "../utils/packages.js";
 import * as logger from "../utils/logger.js";
@@ -14,10 +15,12 @@ import * as logger from "../utils/logger.js";
  *  1. Clone the remote repository (or pull if already present locally),
  *     unless `--local <path>` is supplied — in that case the sync step is
  *     skipped and the provided path is used directly.
- *  2. Read `dot.yaml` from the repo root.
- *  3. Install declared packages (unless `--skip-packages` is passed).
- *  4. Link or copy each dotfile entry to its system target.
- *  5. Print a consolidated result summary.
+ *  2. If the repo does not contain a `dot.yaml`, create a default one.
+ *  3. Save the repository local path to `~/.dot/config.yaml`.
+ *  4. Read `dot.yaml` from the repo root.
+ *  5. Install declared packages (unless `--skip-packages` is passed).
+ *  6. Link or copy each dotfile entry to its system target.
+ *  7. Print a consolidated result summary.
  *
  * @param repoUrl - Remote git URL of the dotfiles repository.
  *                  May be `undefined` when `options.local` is provided.
@@ -49,7 +52,17 @@ export async function installCommand(
     }
   }
 
-  // ── 2. Read config ───────────────────────────────────────────────────────
+  // ── 2. Create default dot.yaml if missing ────────────────────────────────
+  const dotYamlPath = path.join(localDir, CONFIG_FILENAME);
+  if (!fs.existsSync(dotYamlPath)) {
+    logger.info(`No ${CONFIG_FILENAME} found — creating a default one`);
+    writeDefaultConfig(localDir);
+  }
+
+  // ── 3. Save repo path to ~/.dot/config.yaml ─────────────────────────────
+  writeAppConfig({ repository: { localPath: localDir } });
+
+  // ── 4. Read config ───────────────────────────────────────────────────────
   let config;
   try {
     config = readConfig(localDir);
@@ -58,7 +71,7 @@ export async function installCommand(
     process.exit(1);
   }
 
-  // ── 3. Install packages ──────────────────────────────────────────────────
+  // ── 5. Install packages ──────────────────────────────────────────────────
   if (!options.skipPackages && config.packages) {
     try {
       await installPackages(config.packages);
@@ -70,7 +83,7 @@ export async function installCommand(
     logger.info("Skipping package installation (--skip-packages)");
   }
 
-  // ── 4. Link / copy dotfiles ──────────────────────────────────────────────
+  // ── 6. Link / copy dotfiles ──────────────────────────────────────────────
   logger.section("Installing dotfiles");
   const results: FileOperationResult[] = installDotfiles(
     config.dotfiles,
@@ -78,27 +91,19 @@ export async function installCommand(
     options.copy
   );
 
-  // ── 5. Report results ────────────────────────────────────────────────────
+  // ── 7. Report results ────────────────────────────────────────────────────
   printResults(results, options.copy ? "copied" : "symlinked");
 }
 
 /**
  * Expands a leading `~` in a path to the user's home directory.
- * Duplicated here to avoid a circular import with `utils/files.ts`.
- *
- * @param p - The raw path string.
- * @returns The resolved absolute path.
  */
 function expandHome(p: string): string {
   return p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
 /**
- * Logs a human-readable summary of file operation results, grouped into
- * successes and failures.
- *
- * @param results - Array of operation outcomes.
- * @param verb    - Descriptive verb for successful operations (e.g. "symlinked").
+ * Logs a human-readable summary of file operation results.
  */
 function printResults(results: FileOperationResult[], verb: string): void {
   const passed = results.filter((r) => r.success);

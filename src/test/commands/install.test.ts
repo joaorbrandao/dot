@@ -1,3 +1,6 @@
+import fs from "fs";
+import path from "path";
+
 import { installCommand } from "../../commands/install.js";
 import * as git from "../../utils/git.js";
 import * as config from "../../utils/config.js";
@@ -5,12 +8,14 @@ import * as files from "../../utils/files.js";
 import * as packages from "../../utils/packages.js";
 import * as logger from "../../utils/logger.js";
 
+jest.mock("fs");
 jest.mock("../../utils/git.js");
 jest.mock("../../utils/config.js");
 jest.mock("../../utils/files.js");
 jest.mock("../../utils/packages.js");
 jest.mock("../../utils/logger.js");
 
+const mockFs = fs as jest.Mocked<typeof fs>;
 const mockGit = git as jest.Mocked<typeof git>;
 const mockConfig = config as jest.Mocked<typeof config>;
 const mockFiles = files as jest.Mocked<typeof files>;
@@ -45,6 +50,11 @@ beforeEach(() => {
   mockLogger.error.mockImplementation(() => {});
   mockLogger.info.mockImplementation(() => {});
   mockLogger.success.mockImplementation(() => {});
+
+  // By default, dot.yaml exists in the repo (so no default is created).
+  mockFs.existsSync.mockReturnValue(true);
+  // writeAppConfig is mocked automatically via jest.mock.
+  mockConfig.writeAppConfig.mockImplementation(() => {});
 });
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -112,6 +122,42 @@ describe("installCommand()", () => {
     it("logs a success spinner message after cloning", async () => {
       await installCommand(REPO_URL, DEFAULT_OPTIONS);
       expect(spinner.succeed).toHaveBeenCalledWith("Repository ready");
+    });
+
+    it("saves repo path to app config", async () => {
+      await installCommand(REPO_URL, DEFAULT_OPTIONS);
+      expect(mockConfig.writeAppConfig).toHaveBeenCalledWith({
+        repository: { localPath: LOCAL_DIR },
+      });
+    });
+  });
+
+  describe("dot.yaml auto-creation", () => {
+    beforeEach(() => {
+      mockGit.cloneOrPull.mockResolvedValue({} as any);
+      mockConfig.readConfig.mockReturnValue({ dotfiles: [] });
+      mockFiles.installDotfiles.mockReturnValue([]);
+      mockConfig.writeDefaultConfig.mockImplementation(() => {});
+    });
+
+    it("creates dot.yaml when it does not exist in the repo", async () => {
+      mockFs.existsSync.mockImplementation((p) => {
+        // dot.yaml does not exist
+        if (typeof p === "string" && p.endsWith("dot.yaml")) return false;
+        return true;
+      });
+
+      await installCommand(REPO_URL, DEFAULT_OPTIONS);
+
+      expect(mockConfig.writeDefaultConfig).toHaveBeenCalledWith(LOCAL_DIR);
+    });
+
+    it("does not create dot.yaml when it already exists", async () => {
+      mockFs.existsSync.mockReturnValue(true);
+
+      await installCommand(REPO_URL, DEFAULT_OPTIONS);
+
+      expect(mockConfig.writeDefaultConfig).not.toHaveBeenCalled();
     });
   });
 
@@ -197,6 +243,13 @@ describe("installCommand()", () => {
     it("reads config from the local path", async () => {
       await installCommand(undefined, LOCAL_OPTIONS);
       expect(mockConfig.readConfig).toHaveBeenCalledWith(LOCAL_REPO_PATH);
+    });
+
+    it("saves local repo path to app config", async () => {
+      await installCommand(undefined, LOCAL_OPTIONS);
+      expect(mockConfig.writeAppConfig).toHaveBeenCalledWith({
+        repository: { localPath: LOCAL_REPO_PATH },
+      });
     });
 
     it("logs an info message instead of a spinner", async () => {

@@ -1,32 +1,36 @@
-/**
- * Represents a single dotfile mapping in dot.yaml.
- * `source` is the path inside the dotfiles repository.
- * `target` is the absolute (or ~-prefixed) destination path on the system.
- */
-export interface DotfileEntry {
-  source: string;
-  target: string;
-}
+import { z } from "zod";
 
-/**
- * Describes the package manager sections supported in dot.yaml.
- * Each key is a package manager name and its value is the list of packages to install.
- */
-export interface PackageMap {
-  brew?: string[];
-  npm?: string[];
-  pip?: string[];
-  apt?: string[];
-  [manager: string]: string[] | undefined;
-}
+// ── Zod schemas for config files ─────────────────────────────────────────────
 
-/**
- * Root structure of the dot.yaml configuration file that lives in the dotfiles repo.
- */
-export interface DotfilesConfig {
-  dotfiles: DotfileEntry[];
-  packages?: PackageMap;
-}
+export const DotfileEntrySchema = z.object({
+  source: z.string(),
+  target: z.string(),
+});
+
+export const PackageMapSchema = z.record(
+  z.string(),
+  z.array(z.string()).optional()
+);
+
+export const DotfilesConfigSchema = z.object({
+  dotfiles: z.array(DotfileEntrySchema),
+  packages: PackageMapSchema.optional(),
+});
+
+export const AppConfigSchema = z.object({
+  repository: z.object({
+    localPath: z.string(),
+  }),
+});
+
+// ── Derived TypeScript types ─────────────────────────────────────────────────
+
+export type DotfileEntry = z.infer<typeof DotfileEntrySchema>;
+export type PackageMap = z.infer<typeof PackageMapSchema>;
+export type DotfilesConfig = z.infer<typeof DotfilesConfigSchema>;
+export type AppConfig = z.infer<typeof AppConfigSchema>;
+
+// ── CLI option types (not config file types) ─────────────────────────────────
 
 /**
  * Options accepted by the `install` command.
@@ -47,24 +51,12 @@ export interface InstallOptions {
 }
 
 /**
- * Options accepted by the `setup` command.
- */
-export interface SetupOptions {
-  /** Directory where the example `dot.yaml` will be written. */
-  dir: string;
-  /** When true, overwrite an existing `dot.yaml` without prompting. */
-  force: boolean;
-}
-
-/**
  * Options accepted by the `backup` command.
  *
  * Note: Commander maps `--no-push` to the `push` property (boolean, default true).
  * When the user passes `--no-push`, Commander sets `push = false`.
  */
 export interface BackupOptions {
-  /** Local path of the dotfiles repository. */
-  dir: string;
   /** Git commit message override. */
   message: string;
   /**
