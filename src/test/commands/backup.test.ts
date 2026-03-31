@@ -22,7 +22,6 @@ const mockLogger = logger as jest.Mocked<typeof logger>;
 
 const REPO_DIR = "/home/user/dotfiles";
 const DEFAULT_OPTIONS = {
-  dir: REPO_DIR,
   message: "backup: update dotfiles",
   push: true,
 };
@@ -61,13 +60,25 @@ beforeEach(() => {
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 describe("backupCommand()", () => {
+  describe("guard: app config not found", () => {
+    it("calls process.exit(1) when readAppConfig throws", async () => {
+      mockConfig.readAppConfig.mockImplementation(() => {
+        throw new Error("No config found");
+      });
+      await expect(backupCommand(DEFAULT_OPTIONS)).rejects.toThrow("process.exit(1)");
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+  });
+
   describe("guard: not a git repository", () => {
     it("calls process.exit(1) when the .git directory is missing", async () => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(false);
       await expect(backupCommand(DEFAULT_OPTIONS)).rejects.toThrow("process.exit(1)");
     });
 
     it("logs an error message before exiting", async () => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(false);
       await expect(backupCommand(DEFAULT_OPTIONS)).rejects.toThrow();
       expect(mockLogger.error).toHaveBeenCalled();
@@ -76,6 +87,7 @@ describe("backupCommand()", () => {
 
   describe("guard: config cannot be read", () => {
     it("calls process.exit(1) when readConfig throws", async () => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockImplementation(() => {
         throw new Error("no dot.yaml");
@@ -86,6 +98,7 @@ describe("backupCommand()", () => {
 
   describe("nothing to commit", () => {
     it("exits early with a success spinner message when stageAll returns false", async () => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockReturnValue({ dotfiles: [] });
       mockFiles.backupDotfiles.mockReturnValue([]);
@@ -100,6 +113,7 @@ describe("backupCommand()", () => {
 
   describe("full backup flow", () => {
     beforeEach(() => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockReturnValue({
         dotfiles: [{ source: ".zshrc", target: "~/.zshrc" }],
@@ -115,6 +129,12 @@ describe("backupCommand()", () => {
       });
       mockGit.gitCommit.mockResolvedValue(undefined);
       mockGit.gitPush.mockResolvedValue(undefined);
+    });
+
+    it("reads repo path from app config", async () => {
+      await backupCommand(DEFAULT_OPTIONS);
+      expect(mockConfig.readAppConfig).toHaveBeenCalled();
+      expect(mockConfig.readConfig).toHaveBeenCalledWith(REPO_DIR);
     });
 
     it("commits with the provided message", async () => {
@@ -146,8 +166,12 @@ describe("backupCommand()", () => {
   });
 
   describe("error paths", () => {
-    it("calls process.exit(1) when stageAll throws", async () => {
+    beforeEach(() => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(true);
+    });
+
+    it("calls process.exit(1) when stageAll throws", async () => {
       mockConfig.readConfig.mockReturnValue({ dotfiles: [] });
       mockFiles.backupDotfiles.mockReturnValue([]);
       mockGit.stageAll.mockRejectedValue(new Error("git add failed"));
@@ -157,7 +181,6 @@ describe("backupCommand()", () => {
     });
 
     it("calls process.exit(1) when gitCommit throws", async () => {
-      mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockReturnValue({ dotfiles: [] });
       mockFiles.backupDotfiles.mockReturnValue([]);
       mockGit.stageAll.mockResolvedValue(true);
@@ -172,7 +195,6 @@ describe("backupCommand()", () => {
     });
 
     it("calls process.exit(1) when gitPush throws", async () => {
-      mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockReturnValue({ dotfiles: [] });
       mockFiles.backupDotfiles.mockReturnValue([]);
       mockGit.stageAll.mockResolvedValue(true);
@@ -186,6 +208,7 @@ describe("backupCommand()", () => {
 
   describe("partial backup (some files failed)", () => {
     it("logs a warning when some file operations failed", async () => {
+      mockConfig.readAppConfig.mockReturnValue({ repository: { localPath: REPO_DIR } });
       mockFs.existsSync.mockReturnValue(true);
       mockConfig.readConfig.mockReturnValue({
         dotfiles: [

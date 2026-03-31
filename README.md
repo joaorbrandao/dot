@@ -8,7 +8,6 @@ A TypeScript CLI tool to install and backup your dotfiles from a Git repository.
 
 | Command | Description |
 |---|---|
-| `dot setup` | Create an example `dot.yaml` in your dotfiles directory |
 | `dot install <repo-url>` | Clone a dotfiles repo and install its contents onto the system |
 | `dot install --local <path>` | Install from an existing local repository (no clone/pull) |
 | `dot backup` | Copy system dotfiles back into the local repo and commit |
@@ -20,30 +19,27 @@ A TypeScript CLI tool to install and backup your dotfiles from a Git repository.
 ### 1. Install the CLI
 
 ```bash
-npm install -g dot
+npm install -g @joaobrandao/dot
 ```
 
-### 2. Initialise your dotfiles directory
+### 2. Install your dotfiles
 
 ```bash
-dot setup
-# or specify a custom path
-dot setup --dir ~/projects/dotfiles
+# From a remote repository
+dot install https://github.com/you/dotfiles.git
+
+# Or from an existing local repository
+dot install --local ~/projects/dotfiles
 ```
 
-This creates `~/.dotfiles/dot.yaml` with an example configuration and commented-out templates.  
-The generated file already includes an entry for `dot.yaml` itself so your configuration is always backed up alongside your other dotfiles.
+This clones (or uses) the repository, creates a default `dot.yaml` if one doesn't exist, installs declared packages, and symlinks each dotfile to its target location. The repository path is saved to `~/.dot/config.yaml` so other commands know where to find it.
 
 ### 3. Edit `dot.yaml`
 
-Open `~/.dotfiles/dot.yaml` and declare your dotfiles and packages:
+Open the `dot.yaml` in your dotfiles repository and declare your dotfiles and packages:
 
 ```yaml
 dotfiles:
-  # dot.yaml itself is tracked so it is always backed up
-  - source: dot.yaml
-    target: ~/.dotfiles/dot.yaml
-
   - source: .zshrc
     target: ~/.zshrc
 
@@ -62,45 +58,21 @@ packages:
     - typescript
 ```
 
-### 4. Push to a Git remote
+### 4. Backup your dotfiles
 
 ```bash
-cd ~/.dotfiles
-git init && git remote add origin https://github.com/you/dotfiles.git
-git add . && git commit -m "init"
-git push -u origin main
-```
-
-### 5. Install on a new machine
-
-```bash
-dot install https://github.com/you/dotfiles.git
+dot backup
+dot backup --message "add nvim config"
+dot backup --no-push
 ```
 
 ---
 
 ## Command Reference
 
-### `dot setup [options]`
-
-Creates an example `dot.yaml` in the dotfiles directory.
-
-| Option | Default | Description |
-|---|---|---|
-| `-d, --dir <path>` | `~/.dotfiles` | Directory where `dot.yaml` will be created |
-| `-f, --force` | `false` | Overwrite an existing `dot.yaml` |
-
-```bash
-dot setup
-dot setup --dir ~/dotfiles
-dot setup --force   # overwrite existing config
-```
-
----
-
 ### `dot install [repo-url] [options]`
 
-Clones (or pulls) a dotfiles repository, installs declared packages, then symlinks (or copies) each dotfile to its target on the system.
+Clones (or pulls) a dotfiles repository, installs declared packages, then symlinks (or copies) each dotfile to its target on the system. If the repository does not contain a `dot.yaml`, a default one is created. The repository path is saved to `~/.dot/config.yaml`.
 
 Provide either a `<repo-url>` argument **or** the `--local <path>` option — at least one is required.
 
@@ -130,11 +102,10 @@ dot install --local ~/projects/dotfiles --skip-packages
 
 ### `dot backup [options]`
 
-Copies each system dotfile back into the local repository at its declared `source` path, then commits and pushes the changes.
+Copies each system dotfile back into the local repository at its declared `source` path, then commits and pushes the changes. The repository path is read from `~/.dot/config.yaml` (written by `dot install`).
 
 | Option | Default | Description |
 |---|---|---|
-| `-d, --dir <path>` | `~/.dotfiles` | Path to the local dotfiles repository |
 | `-m, --message <msg>` | `backup: YYYY-MM-DD` | Git commit message |
 | `--no-push` | `false` | Commit locally without pushing |
 
@@ -142,7 +113,6 @@ Copies each system dotfile back into the local repository at its declared `sourc
 dot backup
 dot backup --message "add nvim config"
 dot backup --no-push
-dot backup --dir ~/my-dots
 ```
 
 ---
@@ -179,13 +149,12 @@ npm run clean      # remove dist/
 src/
 ├── index.ts               # CLI entry point (Commander)
 ├── types/
-│   └── index.ts           # Shared TypeScript interfaces
+│   └── index.ts           # Zod schemas and TypeScript types
 ├── commands/
-│   ├── setup.ts           # setup command
 │   ├── install.ts         # install command
 │   └── backup.ts          # backup command
 └── utils/
-    ├── config.ts          # Read/write dot.yaml (js-yaml)
+    ├── config.ts          # Read/write dot.yaml and ~/.dot/config.yaml
     ├── files.ts           # Symlink/copy helpers, home expansion
     ├── git.ts             # Clone, pull, commit, push (simple-git)
     ├── packages.ts        # brew / npm / pip / apt installers (zx)

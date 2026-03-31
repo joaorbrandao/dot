@@ -2,41 +2,79 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import yaml from "js-yaml";
-import { DotfilesConfig } from "../types/index.js";
-
-/** Fallback location created by `dot setup` when no config exists in the repo. */
-const DEFAULT_CONFIG_DIR = path.join(os.homedir(), ".dotfiles");
+import {
+  AppConfig,
+  AppConfigSchema,
+  DotfilesConfig,
+  DotfilesConfigSchema,
+} from "../types/index.js";
 
 /** The expected filename for the dot configuration at the repo root. */
 export const CONFIG_FILENAME = "dot.yaml";
 
+/** Directory where the application-level config is stored. */
+export const APP_CONFIG_DIR = path.join(os.homedir(), ".dot");
+
+/** Full path to the application-level config file. */
+export const APP_CONFIG_PATH = path.join(APP_CONFIG_DIR, "config.yaml");
+
 /**
- * Reads and parses the `dot.yaml` configuration file.
+ * The example `dot.yaml` written when a repository has no config file.
  *
- * Resolution order:
- *  1. `<repoDir>/dot.yaml`  — the config committed inside the dotfiles repo.
- *  2. `~/.dotfiles/dot.yaml` — the file created by `dot setup` (fallback).
+ * Written as a raw string (not via `yaml.dump`) so comments are preserved.
+ */
+export const EXAMPLE_CONFIG = `# dot.yaml — Dotfiles Manager configuration
+# https://github.com/joaorbrandao/dot
+#
+# Each entry under "dotfiles" maps a file (or directory) inside this
+# repository to its destination on the system.
+#
+# source : path relative to the root of this dotfiles repository
+# target : absolute destination path on the system (~ is expanded)
+
+dotfiles:
+  # ── Examples — uncomment and adjust as needed ──────────────────────────
+
+  # - source: .zshrc
+  #   target: ~/.zshrc
+
+  # - source: .gitconfig
+  #   target: ~/.gitconfig
+
+  # - source: .config/nvim
+  #   target: ~/.config/nvim
+
+  # - source: .config/starship.toml
+  #   target: ~/.config/starship.toml
+
+# Packages to install before linking dotfiles.
+# Supported managers: brew, npm, pip, apt
+#
+# packages:
+#   brew:
+#     - neovim
+#     - zsh
+#     - starship
+#   npm:
+#     - typescript
+`;
+
+/**
+ * Reads and parses the `dot.yaml` configuration file from the repository root.
  *
- * Throws a descriptive error when neither location contains the file, or when
- * the file exists but contains invalid YAML or an unexpected structure.
+ * Throws a descriptive error when the file is missing, contains invalid YAML,
+ * or has an unexpected structure.
  *
  * @param repoDir - Absolute path to the local dotfiles repository root.
  * @returns The parsed `DotfilesConfig` object.
  */
 export function readConfig(repoDir: string): DotfilesConfig {
-  const primaryPath = path.join(repoDir, CONFIG_FILENAME);
-  const fallbackPath = path.join(DEFAULT_CONFIG_DIR, CONFIG_FILENAME);
+  const configPath = path.join(repoDir, CONFIG_FILENAME);
 
-  // Resolve which path to use, preferring the repo-local config.
-  let configPath: string;
-  if (fs.existsSync(primaryPath)) {
-    configPath = primaryPath;
-  } else if (fs.existsSync(fallbackPath)) {
-    configPath = fallbackPath;
-  } else {
+  if (!fs.existsSync(configPath)) {
     throw new Error(
-      `No ${CONFIG_FILENAME} found in ${repoDir} or ${fallbackPath}. ` +
-        `Run \`dot setup\` to create one.`
+      `No ${CONFIG_FILENAME} found in ${repoDir}. ` +
+        `Run \`dot install <repo-url>\` first.`
     );
   }
 
@@ -49,13 +87,14 @@ export function readConfig(repoDir: string): DotfilesConfig {
     throw new Error(`Failed to parse ${CONFIG_FILENAME}: ${(err as Error).message}`);
   }
 
-  if (!isValidConfig(parsed)) {
+  const result = DotfilesConfigSchema.safeParse(parsed);
+  if (!result.success) {
     throw new Error(
       `${CONFIG_FILENAME} must contain a top-level "dotfiles" array.`
     );
   }
 
-  return parsed;
+  return result.data;
 }
 
 /**
@@ -72,13 +111,58 @@ export function writeConfig(repoDir: string, config: DotfilesConfig): void {
 }
 
 /**
- * Type guard that verifies a parsed YAML value conforms to the `DotfilesConfig` shape.
+ * Writes the EXAMPLE_CONFIG template to `dot.yaml` inside the given directory.
+ * Preserves comments by writing the raw string (not via yaml.dump).
  *
- * @param value - The raw parsed value from `js-yaml`.
- * @returns `true` when `value` satisfies the minimum required shape.
+ * @param repoDir - Absolute path to the local dotfiles repository root.
  */
-function isValidConfig(value: unknown): value is DotfilesConfig {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return Array.isArray(obj["dotfiles"]);
+export function writeDefaultConfig(repoDir: string): void {
+  const configPath = path.join(repoDir, CONFIG_FILENAME);
+  fs.writeFileSync(configPath, EXAMPLE_CONFIG, "utf8");
+}
+
+/**
+ * Reads and parses the application-level config at ~/.dot/config.yaml.
+ *
+ * @returns The parsed `AppConfig` object.
+ */
+export function readAppConfig(): AppConfig {
+  if (!fs.existsSync(APP_CONFIG_PATH)) {
+    throw new Error(
+      `No config found at ${APP_CONFIG_PATH}. ` +
+        `Run \`dot install <repo-url>\` first.`
+    );
+  }
+
+  const raw = fs.readFileSync(APP_CONFIG_PATH, "utf8");
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch (err) {
+    throw new Error(`Failed to parse ${APP_CONFIG_PATH}: ${(err as Error).message}`);
+  }
+
+  const result = AppConfigSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `${APP_CONFIG_PATH} must contain repository.localPath.`
+    );
+  }
+
+  return result.data;
+}
+
+/**
+ * Writes the application-level config to ~/.dot/config.yaml.
+ * Creates the ~/.dot/ directory if it does not exist.
+ *
+ * @param config - The application config to write.
+ */
+export function writeAppConfig(config: AppConfig): void {
+  if (!fs.existsSync(APP_CONFIG_DIR)) {
+    fs.mkdirSync(APP_CONFIG_DIR, { recursive: true });
+  }
+  const content = yaml.dump(config, { lineWidth: 120 });
+  fs.writeFileSync(APP_CONFIG_PATH, content, "utf8");
 }
