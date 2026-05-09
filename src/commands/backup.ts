@@ -4,6 +4,7 @@ import { BackupOptions, FileOperationResult } from "../types/index.js";
 import { stageAll, gitCommit, gitPush, getRepoStatus } from "../utils/git.js";
 import { readConfig, readAppConfig } from "../utils/config.js";
 import { backupDotfiles } from "../utils/files.js";
+import { scanForSecrets } from "../utils/secrets.js";
 import * as logger from "../utils/logger.js";
 
 /**
@@ -63,10 +64,28 @@ export async function backupCommand(options: BackupOptions): Promise<void> {
     logger.warn("Some files could not be backed up — committing the rest.");
   }
 
-  // ── 5. Commit & optionally push ──────────────────────────────────────────
+  // ── 5. Scan for secrets ──────────────────────────────────────────────────
+  if (!options.skipSecretsCheck) {
+    logger.section("Scanning for secrets");
+    const scanSpin = logger.spinner("Running gitleaks…");
+    const { clean, installed, output } = await scanForSecrets(repoDir);
+
+    if (!installed) {
+      scanSpin.warn("gitleaks not found — install it to enable secret scanning");
+    } else if (!clean) {
+      scanSpin.fail("Secrets detected — aborting backup");
+      if (output) console.log("\n" + output);
+      logger.error("Remove the secrets above and retry the backup.");
+      process.exit(1);
+    } else {
+      scanSpin.succeed("No secrets detected");
+    }
+  }
+
+  // ── 6. Commit & optionally push ──────────────────────────────────────────
   logger.section("Committing changes");
 
-  // ── 5a. Stage ────────────────────────────────────────────────────────────
+  // ── 6a. Stage ────────────────────────────────────────────────────────────
   const stageSpin = logger.spinner("Staging files…");
   let hasChanges: boolean;
   try {
@@ -86,7 +105,7 @@ export async function backupCommand(options: BackupOptions): Promise<void> {
   const totalChanges = staged.length + modified.length + untracked.length;
   stageSpin.succeed(`${totalChanges} file(s) staged`);
 
-  // ── 5b. Commit ───────────────────────────────────────────────────────────
+  // ── 6b. Commit ───────────────────────────────────────────────────────────
   const commitSpin = logger.spinner(`Committing: "${options.message}"…`);
   try {
     await gitCommit(repoDir, options.message);
@@ -97,7 +116,7 @@ export async function backupCommand(options: BackupOptions): Promise<void> {
     process.exit(1);
   }
 
-  // ── 5c. Push (optional) ──────────────────────────────────────────────────
+  // ── 6c. Push (optional) ──────────────────────────────────────────────────
   if (options.push) {
     const pushSpin = logger.spinner("Pushing to remote…");
     try {

@@ -92,7 +92,19 @@ program
     "Commit changes locally without pushing to the remote",
     false
   )
-  .action(async (opts: BackupOptions) => {
+  .option(
+    "--skip-secrets-check",
+    "Skip the gitleaks secret scan before committing",
+    false
+  )
+  .action(async (repoDir: string | undefined, opts: BackupOptions) => {
+    // A positional path overrides the --dir default so users can write:
+    //   dot backup ~/my/dotfiles
+    // as well as the explicit form:
+    //   dot backup --dir ~/my/dotfiles
+    if (repoDir) {
+      opts.dir = repoDir;
+    }
     await backupCommand(opts);
   });
 
