@@ -10,12 +10,19 @@
 import { Command } from "commander";
 import os from "os";
 import path from "path";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
 import { installCommand } from "./commands/install.js";
 import { backupCommand } from "./commands/backup.js";
-import { setupCommand } from "./commands/setup.js";
-import { InstallOptions, BackupOptions, SetupOptions } from "./types/index.js";
+import { InstallOptions, BackupOptions } from "./types/index.js";
 
-/** Default local directory where dotfiles repositories are stored. */
+/** Read version from package.json at build‑time location. */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, "..", "package.json"), "utf-8")
+);
+
+/** Default local directory where dotfiles repositories are cloned. */
 const DEFAULT_DOTFILES_DIR = path.join(os.homedir(), ".dotfiles");
 
 const program = new Command();
@@ -23,7 +30,7 @@ const program = new Command();
 program
   .name("dot")
   .description("A CLI tool to install and backup dotfiles from a Git repository")
-  .version("1.0.0");
+  .version(pkg.version);
 
 // ── install ──────────────────────────────────────────────────────────────────
 
@@ -34,7 +41,8 @@ program
       "Pass a remote URL as the first argument, or use --local to point to an existing\n" +
       "local repository and skip the clone/pull step entirely.\n" +
       "Packages declared in dot.yaml are installed via the appropriate package manager,\n" +
-      "and each dotfile is symlinked (or copied) to its target location."
+      "and each dotfile is symlinked (or copied) to its target location.\n" +
+      "The repository path is saved to ~/.dot/config.yaml for use by other commands."
   )
   .option(
     "-d, --dir <path>",
@@ -68,16 +76,11 @@ program
 // ── backup ───────────────────────────────────────────────────────────────────
 
 program
-  .command("backup [repo-dir]")
+  .command("backup")
   .description(
     "Copy system dotfiles back into the local repository, then commit and push the changes.\n" +
-      "The repository must already exist locally and contain a dot.yaml.\n" +
-      "Pass the repo path as a positional argument or with --dir."
-  )
-  .option(
-    "-d, --dir <path>",
-    "Path to the local dotfiles repository",
-    DEFAULT_DOTFILES_DIR
+      "The repository path is read from ~/.dot/config.yaml (written by `dot install`).\n" +
+      "The repository must contain a dot.yaml describing which files to back up."
   )
   .option(
     "-m, --message <msg>",
@@ -103,29 +106,6 @@ program
       opts.dir = repoDir;
     }
     await backupCommand(opts);
-  });
-
-// ── setup ────────────────────────────────────────────────────────────────────
-
-program
-  .command("setup")
-  .description(
-      "Initialise a dotfiles directory by creating an example dot.yaml.\n" +
-      "The generated file includes an entry for dot.yaml itself so the\n" +
-      "configuration is tracked alongside your other dotfiles."
-  )
-  .option(
-    "-d, --dir <path>",
-    "Directory where dot.yaml will be created",
-    DEFAULT_DOTFILES_DIR
-  )
-  .option(
-    "-f, --force",
-    "Overwrite an existing dot.yaml",
-    false
-  )
-  .action(async (opts: SetupOptions) => {
-    await setupCommand(opts);
   });
 
 // ── parse ─────────────────────────────────────────────────────────────────────
